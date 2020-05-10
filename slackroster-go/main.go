@@ -17,13 +17,24 @@ import (
 
 const slackAPI string = "https://slack.com/api"
 
+type ErrorHandler func(w http.ResponseWriter, r *http.Request) error
+
+func errorMiddleware(h ErrorHandler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := h(w, r)
+		if err != nil {
+			fmt.Printf("Error: %s", err)
+		}
+	})
+}
+
 func main() {
 	fmt.Print("Starting server...\n")
 
 	r := mux.NewRouter()
 	// TODO
 	// limit request to slack.com domain
-	r.HandleFunc("/listChannelEmails", listChannelEmails).Methods("POST")
+	r.HandleFunc("/listChannelEmails", errorMiddleware(listChannelEmails)).Methods("POST")
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -89,19 +100,29 @@ func VerifySigningSecret(r *http.Request) ([]byte, error) {
 	return bodyBytes, nil
 }
 
-func listChannelEmails(w http.ResponseWriter, r *http.Request) {
+func listChannelEmails(w http.ResponseWriter, r *http.Request) error {
 	// verify request from slack https://api.slack.com/authentication/verifying-requests-from-slack
 	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
 	if !doNotVerify {
 		reqBodyBytes, err := VerifySigningSecret(r)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		r.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
 	}
 
-	// TODO
 	// check if user requesting is an admin, if not throw error
+	r.ParseForm()
+	requestText := r.FormValue("text")
+	requestingUserID := r.FormValue("user_id")
+
+	adminResponse, err := getUserInfo(requestingUserID)
+	if err != nil {
+		return err
+	}
+	if !adminResponse.User.Is_admin {
+		return errors.New("User does not have admin access")
+	}
 
 	// Request all converstions https://slack.com/api/conversations.list?types=private_channel, public_channel
 	channelsBytes, err := slackAPIRequest("conversations.list?types=private_channel,public_channel",
@@ -109,20 +130,17 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) {
 			{key: "types", value: "private_channel,public_channel"},
 		})
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// From response build list of channel names and IDs
 	var channelsResponse channelsResponse
 	err = json.Unmarshal(channelsBytes, &channelsResponse)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// Check list to see if any names match text in request, if not send text saying no channel name found
-	r.ParseForm()
-	requestText := r.FormValue("text")
-
 	var channelID *string
 	for _, channel := range channelsResponse.Channels {
 		if channel.Name == requestText {
@@ -132,7 +150,8 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if channelID == nil {
-		panic(fmt.Sprintf("channel with name %s does not exist", requestText))
+		err := fmt.Errorf("channel with name %s does not exist", requestText)
+		return err
 	}
 
 	// If match found, request channel members for channel ID https://slack.com/api/conversations.members?channel=G013JD99ZS8
@@ -140,44 +159,49 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) {
 		{key: "channel", value: *channelID},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	var membersResponse membersResponse
 	err = json.Unmarshal(membersBytes, &membersResponse)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// For all members found, Return list of emails
 	for _, userID := range membersResponse.Members {
-		userResponse := getUserInfo(userID)
+		userResponse, err := getUserInfo(userID)
+		if err != nil {
+			return err
+		}
 
-		fmt.Printf("User %s\n", userResponse)
+		fmt.Printf("User %s\n", userResponse.User.Profile)
 	}
+
+	return nil
 }
 
-func getUserInfo(userID string) userResponse {
+func getUserInfo(userID string) (*userResponse, error) {
 	userByte, err := slackAPIRequest("users.info", []queryParams{
 		{key: "user", value: userID},
 	})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	var userResponse userResponse
 	err = json.Unmarshal(userByte, &userResponse)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return userResponse
+	return &userResponse, nil
 }
 
 func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error) {
 	oAuthTokenBot := os.Getenv("OAUTH_TOKEN_BOT")
 	if oAuthTokenBot == "" {
-		panic("Failed to get oauth token")
+		return nil, errors.New("Failed to get oauth token")
 	}
 
 	req, err := http.NewRequest("GET", slackAPI+"/"+endpoint, nil)
@@ -189,19 +213,19 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 	req.Header.Add("Authorization", "Bearer "+oAuthTokenBot)
 
 	if err != nil {
-		panic("Failed to form new request")
+		return nil, errors.New("Failed to form new request")
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic("Failed to get resp")
+		return nil, errors.New("Failed to get resp")
 	}
 	defer resp.Body.Close()
 
 	respBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return respBytes, nil
