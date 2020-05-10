@@ -1,1 +1,1 @@
-web: slackroster/slackroster-go
+web: go run slackroster-go/main.go
