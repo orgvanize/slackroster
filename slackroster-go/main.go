@@ -45,7 +45,7 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 
 		var usersString string
 		for _, user := range users {
-			usersString += user.User.Profile.Email + ", "
+			usersString += user.User.Profile.Email + "\n"
 		}
 
 		response := SlackResponse{
