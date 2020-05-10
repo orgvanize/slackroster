@@ -1,0 +1,20 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${fileDirname}",
+      "env": {
+        "OAUTH_TOKEN_BOT": "xoxb-36397844304-1120444424036-GOWklB8CVZBPJRE3M9i0FAXZ",
+        "SIGNING_SECRET": "8f742231b10e8888abcd99yyyzzz85a5"
+      },
+      "args": []
+    }
+  ]
+}
