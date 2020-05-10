@@ -1,1 +1,1 @@
-web: slackroster-go/bin/slackroster-go
+web: slackroster/slackroster-go
