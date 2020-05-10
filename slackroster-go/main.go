@@ -23,11 +23,11 @@ type SlackResponse struct {
 	Text          string `json:"text"`
 }
 
-type ErrorHandler func(w http.ResponseWriter, r *http.Request) error
+type ErrorHandler func(w http.ResponseWriter, r *http.Request) ([]userResponse, error)
 
 func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handlerErr := h(w, r)
+		users, handlerErr := h(w, r)
 		if handlerErr != nil {
 			log.Printf("Error: %s", handlerErr)
 			response := SlackResponse{
@@ -42,6 +42,24 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(js)
 		}
+
+		var usersString string
+		for _, user := range users {
+			usersString += user.User.Profile.Email + ", "
+		}
+
+		response := SlackResponse{
+			Response_type: "ephemeral",
+			Text:          usersString,
+		}
+
+		js, err := json.Marshal(response)
+		if err != nil {
+			log.Print("Failed to marshal json for slack response")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(js)
 	})
 }
 
@@ -117,13 +135,13 @@ func VerifySigningSecret(r *http.Request) ([]byte, error) {
 	return bodyBytes, nil
 }
 
-func listChannelEmails(w http.ResponseWriter, r *http.Request) error {
+func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]userResponse, error) {
 	// verify request from slack https://api.slack.com/authentication/verifying-requests-from-slack
 	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
 	if !doNotVerify {
 		reqBodyBytes, err := VerifySigningSecret(r)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		r.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
 	}
@@ -135,10 +153,10 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) error {
 
 	adminResponse, err := getUserInfo(requestingUserID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !adminResponse.User.Is_admin {
-		return errors.New("User does not have admin access")
+		return nil, errors.New("User does not have admin access")
 	}
 
 	// Request all converstions https://slack.com/api/conversations.list?types=private_channel, public_channel
@@ -147,14 +165,14 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) error {
 			{key: "types", value: "private_channel,public_channel"},
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// From response build list of channel names and IDs
 	var channelsResponse channelsResponse
 	err = json.Unmarshal(channelsBytes, &channelsResponse)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Check list to see if any names match text in request, if not send text saying no channel name found
@@ -168,7 +186,7 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) error {
 
 	if channelID == nil {
 		err := fmt.Errorf("channel with name %s does not exist", requestText)
-		return err
+		return nil, err
 	}
 
 	// If match found, request channel members for channel ID https://slack.com/api/conversations.members?channel=G013JD99ZS8
@@ -176,26 +194,30 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) error {
 		{key: "channel", value: *channelID},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var membersResponse membersResponse
 	err = json.Unmarshal(membersBytes, &membersResponse)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// For all members found, Return list of emails
+	var users []userResponse
 	for _, userID := range membersResponse.Members {
 		userResponse, err := getUserInfo(userID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
+		if userResponse.User.Profile.Email != "" {
+			users = append(users, *userResponse)
+		}
 		fmt.Printf("User %s\n", userResponse.User.Profile)
 	}
 
-	return nil
+	return users, nil
 }
 
 func getUserInfo(userID string) (*userResponse, error) {
