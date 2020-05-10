@@ -18,9 +18,20 @@ import (
 
 const slackAPI string = "https://slack.com/api"
 
+type BlockText struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type Block struct {
+	Type string    `json:"type"`
+	Text BlockText `json:"text"`
+}
+
 type SlackResponse struct {
-	Response_type string `json:"response_type"`
-	Text          string `json:"text"`
+	Response_type string  `json:"response_type"`
+	Text          string  `json:"text"`
+	Blocks        []Block `json:"blocks"`
 }
 
 type ErrorHandler func(w http.ResponseWriter, r *http.Request) ([]userResponse, error)
@@ -50,7 +61,16 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 
 		response := SlackResponse{
 			Response_type: "ephemeral",
-			Text:          usersString,
+			Blocks: []Block{
+				{
+					Type: "section",
+					Text: BlockText{
+						Type: "mrkdown",
+						Text: "```" + usersString + "```",
+					},
+				},
+			},
+			Text: usersString,
 		}
 
 		js, err := json.Marshal(response)
@@ -214,7 +234,6 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]userResponse, 
 		if userResponse.User.Profile.Email != "" {
 			users = append(users, *userResponse)
 		}
-		fmt.Printf("User %s\n", userResponse.User.Profile)
 	}
 
 	return users, nil
