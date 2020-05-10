@@ -1,1 +1,0 @@
-web: go run slackroster-go/main.go
