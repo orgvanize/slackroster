@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 
@@ -23,7 +24,7 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := h(w, r)
 		if err != nil {
-			fmt.Printf("Error: %s", err)
+			log.Printf("Error: %s", err)
 		}
 	})
 }
