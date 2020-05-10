@@ -19,8 +19,8 @@ import (
 const slackAPI string = "https://slack.com/api"
 
 type SlackResponse struct {
-	Response_type string
-	Text          string
+	Response_type string `json:"response_type"`
+	Text          string `json:"text"`
 }
 
 type ErrorHandler func(w http.ResponseWriter, r *http.Request) error
