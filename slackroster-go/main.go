@@ -65,7 +65,7 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 				{
 					Type: "section",
 					Text: BlockText{
-						Type: "mrkdown",
+						Type: "mrkdwn",
 						Text: "```" + usersString + "```",
 					},
 				},
@@ -171,13 +171,13 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]userResponse, 
 	requestText := r.FormValue("text")
 	requestingUserID := r.FormValue("user_id")
 
-	adminResponse, err := getUserInfo(requestingUserID)
+	_, err := getUserInfo(requestingUserID)
 	if err != nil {
 		return nil, err
 	}
-	if !adminResponse.User.Is_admin {
-		return nil, errors.New("User does not have admin access")
-	}
+	// if !adminResponse.User.Is_admin {
+	// 	return nil, errors.New("User does not have admin access")
+	// }
 
 	// Request all converstions https://slack.com/api/conversations.list?types=private_channel, public_channel
 	channelsBytes, err := slackAPIRequest("conversations.list?types=private_channel,public_channel",
