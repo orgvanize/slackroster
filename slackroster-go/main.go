@@ -18,13 +18,29 @@ import (
 
 const slackAPI string = "https://slack.com/api"
 
+type SlackResponse struct {
+	Response_type string
+	Text          string
+}
+
 type ErrorHandler func(w http.ResponseWriter, r *http.Request) error
 
 func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := h(w, r)
-		if err != nil {
-			log.Printf("Error: %s", err)
+		handlerErr := h(w, r)
+		if handlerErr != nil {
+			log.Printf("Error: %s", handlerErr)
+			response := SlackResponse{
+				Response_type: "ephemeral",
+				Text:          fmt.Sprintf("Error: %s", handlerErr),
+			}
+			js, err := json.Marshal(response)
+			if err != nil {
+				log.Print("Failed to marshal json for slack response")
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(js)
 		}
 	})
 }
