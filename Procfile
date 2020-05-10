@@ -1,0 +1,1 @@
+web: slackroster-go/bin/slackroster-go
