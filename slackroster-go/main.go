@@ -90,12 +90,16 @@ func main() {
 	// TODO
 	// limit request to slack.com domain
 	r.HandleFunc("/listChannelEmails", errorMiddleware(listChannelEmails)).Methods("POST")
+	r.HandleFunc("/channelJoin", channelJoin).Methods("POST")
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = ":8080"
+		port = "8080"
 	}
-	panic(http.ListenAndServe(":"+port, r))
+	httpErr := http.ListenAndServe(":"+port, r)
+	if httpErr != nil {
+		log.Fatal(fmt.Sprintf("failed to bind to port %v: %v", port, httpErr))
+	}
 }
 
 type Channel struct {
@@ -126,7 +130,26 @@ type queryParams struct {
 	value string
 }
 
-func VerifySigningSecret(r *http.Request) ([]byte, error) {
+func channelJoin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-type", "application/json")
+
+	type challengeRequest struct {
+		Challenge string
+	}
+	var cRequest challengeRequest
+	err := json.NewDecoder(r.Body).Decode(&cRequest)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	jsonStream := `{"challenge": "` + cRequest.Challenge + `"}`
+	encoder := json.NewEncoder(w)
+	encoder.Encode(jsonStream)
+
+}
+
+func verifySigningSecret(r *http.Request) ([]byte, error) {
 	signingSecret := os.Getenv("SIGNING_SECRET")
 	if signingSecret == "" {
 		return nil, errors.New("Failed to get signing secret")
@@ -159,7 +182,7 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]userResponse, 
 	// verify request from slack https://api.slack.com/authentication/verifying-requests-from-slack
 	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
 	if !doNotVerify {
-		reqBodyBytes, err := VerifySigningSecret(r)
+		reqBodyBytes, err := verifySigningSecret(r)
 		if err != nil {
 			return nil, err
 		}
