@@ -6,12 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/pkg/errors"
 
 	"github.com/gorilla/mux"
 )
@@ -42,7 +43,9 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 
 		if handlerErr != nil {
+			http.Error(w, error.Error(handlerErr), http.StatusBadRequest)
 			log.Printf("Error: %s", handlerErr)
+
 			response := SlackResponse{
 				Response_type: "ephemeral",
 				Text:          fmt.Sprintf("Error: %s", handlerErr),
@@ -131,12 +134,9 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	w.Header().Set("Content-type", "application/json")
 
 	var req eventRequest
-	body, _ := ioutil.ReadAll(r.Body)
-	log.Print(string(body))
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		http.Error(w, error.Error(err), http.StatusBadRequest)
-		return nil, err
+		return nil, errors.Wrap(err, "failed to decode channel join request")
 	}
 
 	// write 200 response
@@ -153,18 +153,18 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 		{key: "channel", value: req.Event.Channel},
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to get channel info for id (%s)", req.Event.Channel)
 	}
 
 	var channelResponse channelResponse
 	err = json.Unmarshal(channelBytes, &channelResponse)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to unmarshal json for for channel response")
 	}
 
 	joinedUser, err := getUserInfo(req.Event.User)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to get user info for id (%s)", req.Event.User)
 	}
 
 	log.Print(channelResponse.Channel.Name)
