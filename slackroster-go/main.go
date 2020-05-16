@@ -133,20 +133,30 @@ type queryParams struct {
 func channelJoin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 
-	type challengeRequest struct {
+	type eventRequest struct {
 		Challenge string
+		User      string
+		Channel   string
 	}
-	var cRequest challengeRequest
-	err := json.NewDecoder(r.Body).Decode(&cRequest)
+	var req eventRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	jsonStream := `{"challenge": "` + cRequest.Challenge + `"}`
+	jsonStream := `{"challenge": "` + req.Challenge + `"}`
 	encoder := json.NewEncoder(w)
 	encoder.Encode(jsonStream)
 
+	log.Print(req.Channel)
+	log.Print(req.User)
+
+	// get channel id from request
+	// get user id from request
+	// send request to get channel name
+	// send request to get user name
+	// send username and channel name to GS script
 }
 
 func verifySigningSecret(r *http.Request) ([]byte, error) {
