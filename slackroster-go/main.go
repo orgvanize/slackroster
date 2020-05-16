@@ -139,6 +139,8 @@ func channelJoin(w http.ResponseWriter, r *http.Request) {
 		Channel   string
 	}
 	var req eventRequest
+	body, _ := ioutil.ReadAll(r.Body)
+	log.Print(string(body))
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
