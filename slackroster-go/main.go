@@ -43,7 +43,6 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 
 		if handlerErr != nil {
-			// http.Error(w, error.Error(handlerErr), http.StatusBadRequest)
 			log.Printf("Error: %s", handlerErr)
 
 			response := SlackResponse{
@@ -56,6 +55,7 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 			}
 
 			w.Write(js)
+			http.Error(w, error.Error(handlerErr), http.StatusBadRequest)
 			return
 		}
 
@@ -140,8 +140,6 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 		r.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
 	}
 
-	w.Header().Set("Content-type", "application/json")
-
 	var req eventRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -149,6 +147,8 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	}
 
 	// write 200 response
+	w.WriteHeader(200)
+	w.Header().Set("Content-type", "application/json")
 
 	channelBytes, err := slackAPIRequest("conversations.info", []queryParams{
 		{key: "channel", value: req.Event.Channel},
