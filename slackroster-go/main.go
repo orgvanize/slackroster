@@ -150,10 +150,6 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 
 	// write 200 response
 
-	if req.Token != os.Getenv("VERIFICATION_TOKEN") {
-		return nil, errors.New("Request token does not match verification token")
-	}
-
 	channelBytes, err := slackAPIRequest("conversations.info", []queryParams{
 		{key: "channel", value: req.Event.Channel},
 	})
