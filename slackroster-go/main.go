@@ -348,7 +348,6 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 	for _, param := range queryParams {
 		reqQuery.Add(param.key, param.value)
 	}
-	reqQuery.Add("token", os.Getenv("VERIFICATION_TOKEN"))
 	req.URL.RawQuery = reqQuery.Encode()
 	req.Header.Add("Authorization", "Bearer "+oAuthTokenBot)
 
