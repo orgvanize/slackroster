@@ -135,6 +135,9 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 
 	var req eventRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
+	body, _ := ioutil.ReadAll(r.Body)
+	log.Print(body)
+	log.Print(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode channel join request")
 	}
