@@ -34,11 +34,13 @@ type SlackResponse struct {
 	Blocks        []Block `json:"blocks"`
 }
 
-type ErrorHandler func(w http.ResponseWriter, r *http.Request) ([]userResponse, error)
+type ErrorHandler func(w http.ResponseWriter, r *http.Request) ([]byte, error)
 
 func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		users, handlerErr := h(w, r)
+		jsByte, handlerErr := h(w, r)
+		w.Header().Set("Content-Type", "application/json")
+
 		if handlerErr != nil {
 			log.Printf("Error: %s", handlerErr)
 			response := SlackResponse{
@@ -50,36 +52,11 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 				log.Print("Failed to marshal json for slack response")
 			}
 
-			w.Header().Set("Content-Type", "application/json")
 			w.Write(js)
+			return
 		}
 
-		var usersString string
-		for _, user := range users {
-			usersString += user.User.Profile.Email + "\n"
-		}
-
-		response := SlackResponse{
-			Response_type: "ephemeral",
-			Blocks: []Block{
-				{
-					Type: "section",
-					Text: BlockText{
-						Type: "mrkdwn",
-						Text: "```" + usersString + "```",
-					},
-				},
-			},
-			Text: usersString,
-		}
-
-		js, err := json.Marshal(response)
-		if err != nil {
-			log.Print("Failed to marshal json for slack response")
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(js)
+		w.Write(jsByte)
 	})
 }
 
@@ -90,7 +67,7 @@ func main() {
 	// TODO
 	// limit request to slack.com domain
 	r.HandleFunc("/listChannelEmails", errorMiddleware(listChannelEmails)).Methods("POST")
-	r.HandleFunc("/channelJoin", channelJoin).Methods("POST")
+	r.HandleFunc("/channelJoin", errorMiddleware(channelJoin)).Methods("POST")
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -109,6 +86,10 @@ type Channel struct {
 
 type channelsResponse struct {
 	Channels []Channel
+}
+
+type channelResponse struct {
+	Channel Channel
 }
 
 type membersResponse struct {
@@ -130,35 +111,67 @@ type queryParams struct {
 	value string
 }
 
-func channelJoin(w http.ResponseWriter, r *http.Request) {
+type Event struct {
+	Type    string
+	User    string
+	Channel string
+}
+
+type eventRequest struct {
+	Challenge string
+	Token     string
+	Event     Event
+}
+
+type eventType string
+
+const memberJoinedChannel eventType = "member_joined_channel"
+
+func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	w.Header().Set("Content-type", "application/json")
 
-	type eventRequest struct {
-		Challenge string
-		User      string
-		Channel   string
-	}
 	var req eventRequest
 	body, _ := ioutil.ReadAll(r.Body)
 	log.Print(string(body))
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		http.Error(w, error.Error(err), http.StatusBadRequest)
+		return nil, err
 	}
+
+	// write 200 response
 
 	jsonStream := `{"challenge": "` + req.Challenge + `"}`
 	encoder := json.NewEncoder(w)
 	encoder.Encode(jsonStream)
 
-	log.Print(req.Channel)
-	log.Print(req.User)
+	if req.Token != os.Getenv("VERIFICATION_TOKEN") {
+		return nil, errors.New("Request token does not match verification token")
+	}
 
-	// get channel id from request
-	// get user id from request
-	// send request to get channel name
-	// send request to get user name
+	channelBytes, err := slackAPIRequest("conversations.info", []queryParams{
+		{key: "channel", value: req.Event.Channel},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var channelResponse channelResponse
+	err = json.Unmarshal(channelBytes, &channelResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	joinedUser, err := getUserInfo(req.Event.User)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Print(channelResponse.Channel.Name)
+	log.Print(joinedUser.User.Profile.Email)
 	// send username and channel name to GS script
+
+	return nil, nil
 }
 
 func verifySigningSecret(r *http.Request) ([]byte, error) {
@@ -190,7 +203,7 @@ func verifySigningSecret(r *http.Request) ([]byte, error) {
 	return bodyBytes, nil
 }
 
-func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]userResponse, error) {
+func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	// verify request from slack https://api.slack.com/authentication/verifying-requests-from-slack
 	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
 	if !doNotVerify {
@@ -271,7 +284,31 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]userResponse, 
 		}
 	}
 
-	return users, nil
+	var usersString string
+	for _, user := range users {
+		usersString += user.User.Profile.Email + "\n"
+	}
+
+	response := SlackResponse{
+		Response_type: "ephemeral",
+		Blocks: []Block{
+			{
+				Type: "section",
+				Text: BlockText{
+					Type: "mrkdwn",
+					Text: "```" + usersString + "```",
+				},
+			},
+		},
+		Text: usersString,
+	}
+
+	js, err := json.Marshal(response)
+	if err != nil {
+		log.Print("Failed to marshal json for slack response")
+	}
+
+	return js, nil
 }
 
 func getUserInfo(userID string) (*userResponse, error) {
