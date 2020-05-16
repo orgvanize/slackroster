@@ -131,6 +131,15 @@ type eventType string
 const memberJoinedChannel eventType = "member_joined_channel"
 
 func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
+	if !doNotVerify {
+		reqBodyBytes, err := verifySigningSecret(r)
+		if err != nil {
+			return nil, err
+		}
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
+	}
+
 	w.Header().Set("Content-type", "application/json")
 
 	var req eventRequest
@@ -140,10 +149,6 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	}
 
 	// write 200 response
-
-	jsonStream := `{"challenge": "` + req.Challenge + `"}`
-	encoder := json.NewEncoder(w)
-	encoder.Encode(jsonStream)
 
 	if req.Token != os.Getenv("VERIFICATION_TOKEN") {
 		return nil, errors.New("Request token does not match verification token")
