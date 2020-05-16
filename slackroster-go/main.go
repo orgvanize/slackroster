@@ -328,6 +328,12 @@ func getUserInfo(userID string) (*userResponse, error) {
 	return &userResponse, nil
 }
 
+type slackApiResponse struct {
+	Ok      bool
+	Error   string
+	Warning string
+}
+
 func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error) {
 	oAuthTokenBot := os.Getenv("OAUTH_TOKEN_BOT")
 	if oAuthTokenBot == "" {
@@ -336,7 +342,7 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 
 	req, err := http.NewRequest("GET", slackAPI+"/"+endpoint, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to complete slack api request to endpoint (%s)", endpoint)
+		return nil, errors.Wrapf(err, "failed to build slack api request to endpoint (%s)", endpoint)
 	}
 	reqQuery := req.URL.Query()
 	for _, param := range queryParams {
@@ -345,10 +351,6 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 	reqQuery.Add("token", os.Getenv("VERIFICATION_TOKEN"))
 	req.URL.RawQuery = reqQuery.Encode()
 	req.Header.Add("Authorization", "Bearer "+oAuthTokenBot)
-
-	if err != nil {
-		return nil, errors.New("Failed to form new request")
-	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -360,6 +362,19 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 	respBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	var apiResponse slackApiResponse
+	err = json.Unmarshal(respBytes, &apiResponse)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal json for slack api request response")
+	}
+	if apiResponse.Ok != true {
+		return nil, errors.New(apiResponse.Error)
+	}
+
+	if apiResponse.Warning != "" {
+		log.Printf("warning for request to endpoint (%s): %s", endpoint, apiResponse.Warning)
 	}
 
 	return respBytes, nil
