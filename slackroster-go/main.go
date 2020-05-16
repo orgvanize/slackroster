@@ -135,9 +135,6 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 
 	var req eventRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
-	body, _ := ioutil.ReadAll(r.Body)
-	log.Print(body)
-	log.Print(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode channel join request")
 	}
@@ -338,6 +335,9 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 	}
 
 	req, err := http.NewRequest("GET", slackAPI+"/"+endpoint, nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to complete slack api request to endpoint (%s)", endpoint)
+	}
 	reqQuery := req.URL.Query()
 	for _, param := range queryParams {
 		reqQuery.Add(param.key, param.value)
