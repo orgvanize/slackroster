@@ -55,7 +55,6 @@ func errorMiddleware(h ErrorHandler) http.HandlerFunc {
 			}
 
 			w.Write(js)
-			http.Error(w, error.Error(handlerErr), http.StatusBadRequest)
 			return
 		}
 
