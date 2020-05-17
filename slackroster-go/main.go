@@ -133,7 +133,7 @@ const memberJoinedChannel eventType = "member_joined_channel"
 func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
 	if !doNotVerify {
-		reqBodyBytes, err := verifySigningSecret(r)
+		reqBodyBytes, err := VerifySigningSecret(r)
 		if err != nil {
 			return nil, err
 		}
@@ -175,11 +175,11 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	log.Print(channelResponse.Channel.Name)
 	log.Print(joinedUser.User.Profile.Email)
 
-	googleAccessToken, err := getGoogleAccessToken(
-		os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
-		os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
-		os.Getenv("GOOGLE_OAUTH_REFRESH_TOKEN"),
-	)
+	googleAccessToken, err := getGoogleAccessToken(googleAuthCredentials{
+		clientID:     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
+		clientSecret: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+		refreshToken: os.Getenv("GOOGLE_OAUTH_REFRESH_TOKEN"),
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get google access token")
 	}
@@ -209,36 +209,48 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	return nil, nil
 }
 
-type googleAuthResponse struct {
-	Access_token string
+type googleAuthCredentials struct {
+	clientID     string
+	clientSecret string
+	refreshToken string
 }
 
-func getGoogleAccessToken(oAuthClientID string, oAuthClientSecret string, oAuthRefreshToken string) (string, error) {
+type googleAuthResponse struct {
+	Access_token string
+	Error        string
+}
+
+func getGoogleAccessToken(credentials googleAuthCredentials) (string, error) {
 	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("client_id", oAuthClientID)
-	data.Set("client_secret", oAuthClientSecret)
-	data.Set("refresh_token", oAuthRefreshToken)
+	data.Add("grant_type", "refresh_token")
+	data.Add("client_id", credentials.clientID)
+	data.Add("client_secret", credentials.clientSecret)
+	data.Add("refresh_token", credentials.refreshToken)
+
 	resp, err := http.PostForm("https://oauth2.googleapis.com/token", data)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to post to google oauth api")
+		return "", errors.Wrap(err, "failed to complete request to google oauth api")
 	}
 
 	respBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read response body for google api request")
 	}
+	defer resp.Body.Close()
 
 	var googleAuthResponse googleAuthResponse
 	err = json.Unmarshal(respBytes, &googleAuthResponse)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to unmarshal json for google api response")
 	}
+	if resp.StatusCode != 200 {
+		return "", errors.New(fmt.Sprintf("error requesting access_token: (%s)", googleAuthResponse.Error))
+	}
 
 	return googleAuthResponse.Access_token, nil
 }
 
-func verifySigningSecret(r *http.Request) ([]byte, error) {
+func VerifySigningSecret(r *http.Request) ([]byte, error) {
 	signingSecret := os.Getenv("SIGNING_SECRET")
 	if signingSecret == "" {
 		return nil, errors.New("Failed to get signing secret")
@@ -271,7 +283,7 @@ func listChannelEmails(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	// verify request from slack https://api.slack.com/authentication/verifying-requests-from-slack
 	_, doNotVerify := os.LookupEnv("DO_NOT_VERIFY_REQUEST")
 	if !doNotVerify {
-		reqBodyBytes, err := verifySigningSecret(r)
+		reqBodyBytes, err := VerifySigningSecret(r)
 		if err != nil {
 			return nil, err
 		}
