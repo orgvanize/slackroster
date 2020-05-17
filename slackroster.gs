@@ -1,6 +1,15 @@
 // @OnlyCurrentDoc
 
 function doGet(request) {
+  var bearer = request.parameter.access_token;
+  if(!bearer)
+    return ContentService.createTextOutput('Missing request parameter: access_token');
+  
+  var openid = JSON.parse(get('https://accounts.google.com/.well-known/openid-configuration'));
+  var active = JSON.parse(get(openid.userinfo_endpoint, bearer));
+  if(active.email != Session.getEffectiveUser().getEmail() || !active.email_verified)
+  return ContentService.createTextOutput('Unauthorized user: ' + active.email);
+  
   var email = request.parameter.email;
   if(!email)
     return ContentService.createTextOutput('Missing request parameter: email');
@@ -35,4 +44,14 @@ function lookup(table, key, fallback = null) {
   if(!cell)
     return fallback;
   return sheet.getRange(cell.getRow(), 2).getValue();
+}
+
+function get(resource, authorization) {
+  if(authorization)
+    authorization = {
+      headers: {
+        Authorization: 'Bearer ' + authorization,
+      },
+    };
+  return UrlFetchApp.fetch(resource, authorization).getContentText();
 }
