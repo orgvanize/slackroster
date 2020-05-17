@@ -215,7 +215,7 @@ type googleAuthResponse struct {
 
 func getGoogleAccessToken(oAuthClientID string, oAuthClientSecret string, oAuthRefreshToken string) (string, error) {
 	data := url.Values{}
-	data.Set("grant_type", "refres_token")
+	data.Set("grant_type", "refresh_token")
 	data.Set("client_id", oAuthClientID)
 	data.Set("client_secret", oAuthClientSecret)
 	data.Set("refresh_token", oAuthRefreshToken)
