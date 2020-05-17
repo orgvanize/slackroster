@@ -150,6 +150,10 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	w.WriteHeader(200)
 	w.Header().Set("Content-type", "application/json")
 
+	if eventType(req.Event.Type) != memberJoinedChannel {
+		return nil, nil
+	}
+
 	channelBytes, err := slackAPIRequest("conversations.info", []queryParams{
 		{key: "channel", value: req.Event.Channel},
 	})
@@ -189,8 +193,8 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	reqQuery := googleScriptRequest.URL.Query()
 	reqQuery.Add("email", joinedUser.User.Profile.Email)
 	reqQuery.Add("channel", channelResponse.Channel.Name)
+	reqQuery.Add("access_token", googleAccessToken)
 	googleScriptRequest.URL.RawQuery = reqQuery.Encode()
-	googleScriptRequest.Header.Add("Authorization", "Bearer "+googleAccessToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(googleScriptRequest)
