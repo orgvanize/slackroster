@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/pkg/errors"
@@ -169,9 +170,65 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 
 	log.Print(channelResponse.Channel.Name)
 	log.Print(joinedUser.User.Profile.Email)
+
+	googleAccessToken, err := getGoogleAccessToken(
+		os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
+		os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+		os.Getenv("GOOGLE_OAUTH_REFRESH_TOKEN"),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get google access token")
+	}
+
 	// send username and channel name to GS script
+	googleScriptRequest, err := http.NewRequest("GET", os.Getenv("GOOGLE_SCRIPT_BASE_URL"), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build new request for google scripts app")
+	}
+
+	reqQuery := googleScriptRequest.URL.Query()
+	reqQuery.Add("email", joinedUser.User.Profile.Email)
+	reqQuery.Add("channel", channelResponse.Channel.Name)
+	googleScriptRequest.URL.RawQuery = reqQuery.Encode()
+	googleScriptRequest.Header.Add("Authorization", "Bearer "+googleAccessToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(googleScriptRequest)
+	if err != nil {
+		return nil, errors.New("Failed to execute request for google script")
+	}
+	defer resp.Body.Close()
 
 	return nil, nil
+}
+
+type googleAuthResponse struct {
+	Access_token string
+}
+
+func getGoogleAccessToken(oAuthClientID string, oAuthClientSecret string, oAuthRefreshToken string) (string, error) {
+	data := url.Values{}
+	data.Set("grant_type", "refres_token")
+	data.Set("client_id", oAuthClientID)
+	data.Set("client_secret", oAuthClientSecret)
+	data.Set("refresh_token", oAuthRefreshToken)
+	resp, err := http.PostForm("https://oauth2.googleapis.com/token", data)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to post to google oauth api")
+	}
+
+	respBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read response body for google api request")
+	}
+
+	var googleAuthResponse googleAuthResponse
+	err = json.Unmarshal(respBytes, &googleAuthResponse)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to unmarshal json for google api response")
+	}
+
+	return googleAuthResponse.Access_token, nil
 }
 
 func verifySigningSecret(r *http.Request) ([]byte, error) {
@@ -335,8 +392,8 @@ type slackApiResponse struct {
 }
 
 func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error) {
-	oAuthTokenBot := os.Getenv("OAUTH_TOKEN_BOT")
-	if oAuthTokenBot == "" {
+	slackOAuthToken := os.Getenv("SLACK_OAUTH_TOKEN")
+	if slackOAuthToken == "" {
 		return nil, errors.New("Failed to get oauth token")
 	}
 
@@ -349,7 +406,7 @@ func slackAPIRequest(endpoint string, queryParams []queryParams) ([]byte, error)
 		reqQuery.Add(param.key, param.value)
 	}
 	req.URL.RawQuery = reqQuery.Encode()
-	req.Header.Add("Authorization", "Bearer "+oAuthTokenBot)
+	req.Header.Add("Authorization", "Bearer "+slackOAuthToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
