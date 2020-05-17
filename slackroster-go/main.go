@@ -199,6 +199,9 @@ func channelJoin(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := ioutil.ReadAll(resp.Body)
+	log.Print(string(body))
+
 	return nil, nil
 }
 
