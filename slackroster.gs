@@ -14,7 +14,9 @@ function doGet(request) {
     return ContentService.createTextOutput('Invalid request parameter: \'channel=' + channel + '\'');
   
   var account = lookup('email', email, email);
-  DriveApp.getFolderById(folder).addEditor(account);
+  folder = DriveApp.getFolderById(folder);
+  if(folder.getAccess(account) != DriveApp.Permission.EDIT)
+    folder.addEditor(account);
   return ContentService.createTextOutput();
 }
 
