@@ -113,3 +113,29 @@ Setting up Slack side
 6. Hit the circled i in the upper-right corner, then choose More -> Add apps
 7. Hit the Add button next to the Slack app you installed earlier
 8. Add someone to the channel, and they should receive access to the associated Drive folder
+
+Troubleshooting
+===============
+If the Heroku and Google Apps Script logs are unhelpful, try this...
+Slack
+* Check that the bot is a member of the channel
+Slack API console
+* Check that Features -> Event Subscriptions has a URL ending in /channelJoin
+* Check that Features -> OAuth & Permissions shows users:read.email under Bot Token Scopes
+Google Drive
+* Check that the Google account you used for setup can edit the folder you want it to share
+Google Sheet
+* Check that there is a hidden blank row directly under the header on both tabs
+* Check that the configured channel name exactly matches the one in Slack
+* Check that the configured folder ID exactly matches *only the end* of the Drive folder URL
+Google Apps Script editor
+* Hit Deploy -> Manage Deployments and check that Execute as is Me and Who has access is Everyone
+* Run $ curl -Fgrant_type=refresh_token -Fclient_id= -Fclient_secret= -Frefresh_token= https://oauth2.googleapis.com/token
+* Check that the above returns an access_token
+* Try navigating to the Web app URL, suffixing it with ?access_token=&email=&channel=
+Heroku
+* Check that you configured the buildpacks correctly
+* Try temporarily adding a config var DO_NOT_VERIFY_REQUEST set to true
+* Check that the GOOGLE_SCRIPT_BASE_URL matches that shown in Apps Script's Manage deployments
+* Check that GOOGLE_OAUTH_CLIENT_* match the values you just tested with curl
+* Check that SLACK_OAUTH_TOKEN and SIGNING_SECRET match those shown in the Slack API console
