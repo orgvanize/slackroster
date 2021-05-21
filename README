@@ -1,0 +1,115 @@
+This app automatically shares edit access to Google Drive folders with users who are added to
+associated Slack channels.  Once installed, the channel mappings are configurable via a Google Sheet
+of (channel name, folder ID) pairs.  By default, Slack emails are used as Google accounts, but this
+can be overriden on a per-user basis by adding (email address, Google account) pairs to a separate
+tab of the same Sheet.
+The rest of this document explains how to do the one-time infrastructure setup.
+
+Setting up Heroku side
+======================
+ 1. Log into https://dashboard.heroku.com
+ 2. Hit New -> Create new app
+ 3. Populate App name and hit Create app
+ 4. Right-click Open app and hit Copy Link Location
+ 5. Deploy a *different* project that supports Slack URL verification (e.g., Slackline)
+ 6. Log into https://api.slack.com/apps
+ 7. Hit Create New App -> From scratch
+ 8. Populate App Name, select the workspace, and hit Create App
+ 9. Under Features, hit Event Subscriptions
+10. Toggle the slider from Off to On
+11. Paste the URL you copied earlier into Request URL, then suffix it with channelJoin
+12. Once it says Verified, expand Subscribe to bot events
+13. Hit Add Bot User Event and select member_joined_channel
+14. Hit Save Changes
+15. Under Features, hit OAuth & Permissions
+16. Under Scopes -> Bot Token Scopes, hit Add an OAuth Scope and select users:read.email
+17. In the Additional scope required dialog, hit Add Scopes
+18. Under Features, hit App Home
+19. Toggle Always Show My Bot as Online to on
+20. Toggle Messages Tab off
+21. In the Turn Off Messages Tab? dialog, hit Turn Off
+22. Under Settings, hit Basic Information
+23. Under Display Information, hit Add App Icon and upload one of your choice
+24. Under Settings, hit Install App
+25. Hit Install to Workspace, then Allow
+26. Under Bot User OAuth Token, hit the Copy button
+27. Return to the Heroku dashboard and hit Settings
+28. Under Config Vars, hit Reveal Config Vars
+29. Set KEY to SLACK_OAUTH_TOKEN, paste the token from earlier into VALUE, and hit Add
+30. Under Buildpacks, hit Add buildpack and enter https://github.com/timanovsky/subdir-heroku-buildpack
+31. Hit Add buildpack again, select go, and hit Save changes
+32. Hit the X button to delete the heroku/nodejs (or other existing) buildpack
+33. Under Config Vars, set KEY to PROJECT_PATH and VALUE to slackroster-go, then hit Add
+34. Back in the Slack API console, go to Basic Information under Settings
+35. Under App Credentials, find Signing Secret and hit Show then copy it to your keyboard
+36. Back in the Heroku Dashboard, return to Config Vars under Settings
+37. Set KEY to SIGNING_SECRET, paste the secret into VALUE, and hit Add
+38. Redeploy to Heroku, using *this* project this time
+39. Close the Slack API console, but leave the Heroku dashboard open for now
+
+Setting up Google side
+======================
+ 1. Log into https://drive.google.com
+ 2. Open the folder where you want the configuration spreadsheet to live
+ 3. Hit New -> Google Sheets and hit CREATE AND SHARE if prompted to confirm
+ 4. Give the sheet a name
+ 5. Hit Tools -> Script editor
+ 6. Give the resulting script a name
+ 7. Paste the contents of the slackroster.gs file in to replace the body of the script
+ 8. Hit Deploy -> New deployment
+ 9. Next to Select type, hit the gear and choose Web app
+10. Under Web app, leave Execute as set to Me and change Who has access to Anyone
+11. Hit Deploy, then Authorize access
+12. In the Sign in with Google popup, select the same account that owns the Sheet
+13. Hit the Advanced link in the lower-left corner of the warning message
+14. Hit the Go to... (unsafe) link at the bottom
+15. Hit Allow and wait for the popup to close and the dialog to show New deployment
+16. Under Web app, hit the Copy button next to URL
+17. Close the Apps Script editor
+18. Back in the Heroku Dashboard, return to Config Vars under Settings
+19. Set KEY to GOOGLE_SCRIPT_BASE_URL, paste the URL into VALUE, and hit Add
+20. Log into https://console.developers.google.com with same account that owns the Sheet
+21. Hit Select a project -> NEW PROJECT
+22. Populate Project name and hit CREATE
+23. Wait for the page to redirect to the new project's dashboard
+24. Under APIs & Services, hit OAuth consent screen
+25. Set User Type to External and hit CREATE
+26. Populate App name, User support email, Developer contact information, and optionally App logo
+27. Hit SAVE AND CONTINUE, then ADD OR REMOVE SCOPES
+28. Select .../auth/userinfo.email and hit UPDATE
+29. Hit SAVE AND CONTINUE twice to reach the Summary step
+30. Under APIs & Services, hit Credentials
+31. Hit CREATE CREDENTIALS -> OAuth client ID
+32. Set Application type to Web application and Name as desired
+33. Under Authorized redirect URIs, hit ADD URI and enter https://developers.google.com/oauthplayground
+34. Hit CREATE
+35. Copy Your Client ID into a Heroku config var called GOOGLE_OAUTH_CLIENT_ID
+36. Copy Your Client Secret into a Heroku config var called GOOGLE_OAUTH_CLIENT_SECRET
+37. Browse to https://developers.google.com/oauthplayground
+38. Hit the gear in the upper right and check Use your own OAuth credentials
+39. Paste the same values in for OAuth Client ID and OAuth Client secret
+40. Hit the Close link
+41. Expand Apps Script API v1 and select https://www.googleapis.com/auth/userinfo.email
+42. Hit Authorize APIs, then select the same account that owns the Sheet
+43. Hit Exchange authorization code for tokens
+44. Copy the value after "refresh_token":, without the enclosing quotes
+45. Back in the Heroku Dashboard, return to Config Vars under Settings
+46. Set KEY to GOOGLE_OAUTH_REFRESH_TOKEN, paste the token into VALUE, and hit Add
+47. Close the Google Cloud Platform console and OAuth 2.0 Playground
+48. Return to the configuration Google Sheet
+49. Rename Sheet1 to channel and set the header row to two columns: channel and folder
+50. Hide the first row under the header so there is always an unused template
+51. Add a new tab, rename it to email, and set the header row to three columns: email, gaccount, and name
+52. Hide the first row under the header so there is always an unused template
+53. Close the Heroku dashboard, but leave the configuration Sheet open for now
+
+Setting up Slack side
+=====================
+1. Go to https://drive.google.com and browse to a folder you want to share automatically
+2. Copy the portion of the URL after /folders/ to your clipboard
+3. In the configuration Sheet, open the channel tab
+4. Add a record just under the header with an associated Slack channel name and the pasted identifier
+5. Open your Slack workspace and browse to the chosen channel
+6. Hit the circled i in the upper-right corner, then choose More -> Add apps
+7. Hit the Add button next to the Slack app you installed earlier
+8. Add someone to the channel, and they should receive access to the associated Drive folder
